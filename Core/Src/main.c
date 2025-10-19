@@ -24,6 +24,9 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include <stdint.h>
+#include <stdio.h>
+#include <string.h>
 
 /* USER CODE END Includes */
 
@@ -92,6 +95,10 @@ int main(void)
   MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
 
+  /* 在程序开始时，先发送一条启动信息 */
+  uint8_t tx_buffer[] = "[USER] STM32 USART1 is working!\r\n";
+  HAL_UART_Transmit(&huart1, tx_buffer, sizeof(tx_buffer) - 1, 100);
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -101,11 +108,16 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-    
-    HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin); 
 
+    /* 切换灯所在GPIO的高低电平 */
+    HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
+
+    /* 串口传输一次日志 */
+    uint8_t message[] = "Light Toggled!\r\n";
+    HAL_UART_Transmit(&huart1, message, strlen((char*)message), 100);
+
+    /* 等待一段时间 */
     HAL_Delay(500);
-
   }
   /* USER CODE END 3 */
 }
