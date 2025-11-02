@@ -13,6 +13,12 @@
 extern "C" {
 #endif
 
+/* Only 2 fields are needed for the service */
+typedef struct {
+    float temperature;
+    float humidity;
+} DHT11_DATA_S;
+
 typedef enum {
 	DHT11_OK = 0,
 	DHT11_TIMEOUT,
