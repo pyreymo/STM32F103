@@ -48,12 +48,14 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Lib/SSD1306/ssd1306.c
     Lib/SSD1306/ssd1306_fonts.c
     Lib/SSD1306/ssd1306_tests.c
+    Lib/DHT11/DHT11.c
 )
 
 # Add include paths
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined include paths
     Lib/SSD1306
+    Lib/DHT11
 )
 
 # Add project symbols (macros)

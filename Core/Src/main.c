@@ -19,15 +19,20 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "i2c.h"
+#include "tim.h"
 #include "usart.h"
 #include "gpio.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
+#include "DHT11.h"
+#include "ssd1306_fonts.h"
 #include "ssd1306_tests.h"
 
 /* USER CODE END Includes */
@@ -62,6 +67,40 @@ void SystemClock_Config(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
+static inline void OLED_Printf(uint8_t x, uint8_t y, SSD1306_Font_t font, SSD1306_COLOR color, const char* fmt, ...) {
+    static char oled_buffer[128];
+
+    va_list args;
+    va_start(args, fmt);
+
+    vsnprintf(oled_buffer, sizeof(oled_buffer), fmt, args);
+
+    va_end(args);
+
+    ssd1306_SetCursor(x, y);
+    ssd1306_WriteString(oled_buffer, font, color);
+}
+
+static inline void UART_Printf(UART_HandleTypeDef* huart, const char* fmt, ...) {
+    static char uart_buffer[256];
+
+    va_list args;
+    va_start(args, fmt);
+
+    int len = vsnprintf(uart_buffer, sizeof(uart_buffer), fmt, args);
+
+    va_end(args);
+
+    if (len > 0) {
+        HAL_UART_Transmit(huart, (uint8_t*)uart_buffer, len, HAL_MAX_DELAY);
+    }
+}
+
+static inline void float_to_int_parts(float f, int32_t* int_part, int32_t* frac_part) {
+    *int_part = (int32_t)f;
+    *frac_part = abs((int32_t)((f * 100.0f)) % 100);
+}
+
 /* USER CODE END 0 */
 
 /**
@@ -95,13 +134,19 @@ int main(void)
   MX_GPIO_Init();
   MX_I2C1_Init();
   MX_USART1_UART_Init();
+  MX_TIM2_Init();
   /* USER CODE BEGIN 2 */
 
-  /* 在程序开始时，先发送一条启动信息 */
-  uint8_t tx_buffer[] = "[USER] STM32 USART1 is working!\r\n";
-  HAL_UART_Transmit(&huart1, tx_buffer, sizeof(tx_buffer) - 1, 100);
+  /* 启动日志 */
+  UART_Printf(&huart1, "[USER] STM32 USART1 is working!\r\n");
 
-  ssd1306_TestAll();
+  /* 初始化DHT相关 */
+  DHT11_InitTypeDef dht;
+  HAL_DHT11_Init(&dht, DHT11_GPIO_Port, DHT11_Pin, &htim2);
+
+  /* 初始化屏幕 */
+  ssd1306_Init();
+  // ssd1306_TestDrawBitmap();
 
   /* USER CODE END 2 */
 
@@ -113,10 +158,29 @@ int main(void)
 
     /* USER CODE BEGIN 3 */
 
+    /* LED 闪烁 */
     HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
+
+    /* 获取 DHT11 读数 */
+    (void)HAL_DHT11_ReadData(&dht);
+
+    int32_t humi_int, humi_frac;
+    int32_t temp_int, temp_frac;
+    float_to_int_parts(dht.Humidity, &humi_int, &humi_frac);
+    float_to_int_parts(dht.Temperature, &temp_int, &temp_frac);
+
+    ssd1306_Fill(Black);
+
+    OLED_Printf(0, 0, Font_7x10, White, "System Info");
+    OLED_Printf(0, 20, Font_7x10, White, "Humi: %ld.%02ld %%", humi_int, humi_frac);
+    OLED_Printf(0, 32, Font_7x10, White, "Temp: %ld.%02ld C", temp_int, temp_frac);
+
+    ssd1306_UpdateScreen();
 
     HAL_Delay(500);
   }
+
+  HAL_DHT11_DeInit(&dht);
   /* USER CODE END 3 */
 }
 
