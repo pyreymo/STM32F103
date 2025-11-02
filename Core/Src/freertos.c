@@ -93,8 +93,8 @@ const osMutexAttr_t screenUpdateMutex_attributes = {
 /* USER CODE BEGIN FunctionPrototypes */
 static inline void UART_Printf(UART_HandleTypeDef* huart, const char* fmt, ...);
 static inline void float_to_int_parts(float f, int32_t* int_part, int32_t* frac_part);
-static void DrawModernThermometer(u8g2_t *u8g2, int32_t temp_int, int32_t temp_frac, int x, int y);
-static void DrawModernHumidity(u8g2_t *u8g2, int32_t humi_int, int32_t humi_frac, int x, int y);
+static void DrawThermometer(u8g2_t *u8g2, int32_t temp_int, int x, int y);
+static void DrawHumidity(u8g2_t *u8g2, int32_t humi_int, int x, int y);
 static void DrawProgressBar(u8g2_t *u8g2, int x, int y, int width, int height, int percentage, uint8_t color);
 /* USER CODE END FunctionPrototypes */
 
@@ -244,31 +244,23 @@ void StartDisplayTask(void *argument)
       float_to_int_parts(receivedData.temperature, &temp_int, &temp_frac);
 
       if (osMutexAcquire(screenUpdateMutexHandle, 100) == osOK) {
-        /* Clear the display buffer */
         u8g2_ClearBuffer(&u8g2);
 
-        /* Draw modern UI elements */
-        DrawModernThermometer(&u8g2, temp_int, temp_frac, 10, 10);
-        DrawModernHumidity(&u8g2, humi_int, humi_frac, 10, 40);
+        // 温度显示在左侧
+        DrawThermometer(&u8g2, temp_int, 2, 32);
+        // 湿度显示在右侧
+        DrawHumidity(&u8g2, humi_int, 70, 32);
 
-        /* Draw title */
-        u8g2_SetFont(&u8g2, u8g2_font_helvB12_tf);
-        u8g2_DrawStr(&u8g2, 25, 8, "DHT11 Monitor");
-
-        /* Draw separator line */
-        u8g2_DrawHLine(&u8g2, 0, 15, 128);
-
-        /* Send the buffer to the display */
         u8g2_SendBuffer(&u8g2);
 
         if (osMutexRelease(screenUpdateMutexHandle) != osOK) {
-            UART_Printf(&huart1, "[USER] [FATAL] screenUpdateMutexHandle release failed!\r\n");
-            break;
+          UART_Printf(&huart1, "[USER] [FATAL] screenUpdateMutexHandle release failed!\r\n");
+          break;
         }
       }
 
       UART_Printf(&huart1, "[USER] Temperature: %d.%02d°C, Humidity: %d.%02d%%\r\n",
-                  temp_int, temp_frac, humi_int, humi_frac);
+        temp_int, temp_frac, humi_int, humi_frac);
     }
   }
   /* USER CODE END StartDisplayTask */
@@ -276,116 +268,79 @@ void StartDisplayTask(void *argument)
 
 /* Private application code --------------------------------------------------*/
 static inline void UART_Printf(UART_HandleTypeDef* huart, const char* fmt, ...) {
-    static char uart_buffer[256];
+  static char uart_buffer[256];
 
-    va_list args;
-    va_start(args, fmt);
+  va_list args;
+  va_start(args, fmt);
 
-    int len = vsnprintf(uart_buffer, sizeof(uart_buffer), fmt, args);
+  int len = vsnprintf(uart_buffer, sizeof(uart_buffer), fmt, args);
 
-    va_end(args);
+  va_end(args);
 
-    if (len > 0) {
-        HAL_UART_Transmit(huart, (uint8_t*)uart_buffer, len, HAL_MAX_DELAY);
-    }
+  if (len > 0) {
+    HAL_UART_Transmit(huart, (uint8_t*)uart_buffer, len, HAL_MAX_DELAY);
+  }
 }
 
 static inline void float_to_int_parts(float f, int32_t* int_part, int32_t* frac_part) {
-    *int_part = (int32_t)f;
-    *frac_part = abs((int32_t)((f * 100.0f)) % 100);
+  *int_part = (int32_t)f;
+  *frac_part = abs((int32_t)((f * 100.0f)) % 100);
 }
 
-/**
-  * @brief  Draw modern thermometer icon with temperature value
-  * @param  u8g2: U8g2 structure pointer
-  * @param  temp_int: Integer part of temperature
-  * @param  temp_frac: Fractional part of temperature
-  * @param  x: X position
-  * @param  y: Y position
-  * @retval None
-  */
-static void DrawModernThermometer(u8g2_t *u8g2, int32_t temp_int, int32_t temp_frac, int x, int y) {
-    char temp_str[16];
+// 水滴/湿度 图标 (16x16)
+static const uint8_t image_humidity_drop_bits[] = {
+    0x20, 0x00, 0x20, 0x00, 0x30, 0x00, 0x70, 0x00, 0x78, 0x00, 0xf8, 0x00, 
+    0xfc, 0x01, 0xfc, 0x01, 0x7e, 0x03, 0xfe, 0x02, 0xff, 0x06, 0xff, 0x07, 
+    0xfe, 0x03, 0xfe, 0x03, 0xfc, 0x01, 0xf0, 0x00
+};
 
-    // Draw thermometer icon
-    u8g2_DrawCircle(u8g2, x + 5, y + 20, 4, U8G2_DRAW_ALL);
-    u8g2_DrawVLine(u8g2, x + 5, y + 5, 15);
-    u8g2_DrawCircle(u8g2, x + 5, y + 10, 2, U8G2_DRAW_ALL);
+// 温度计 图标 (16x16)
+static const uint8_t image_thermometer_bits[] = {
+    0x38, 0x00, 0x44, 0x40, 0xd4, 0xa0, 0x54, 0x40, 0xd4, 0x1c, 0x54, 0x06, 
+    0xd4, 0x02, 0x54, 0x02, 0x54, 0x06, 0x92, 0x1c, 0x39, 0x01, 0x75, 0x01, 
+    0x7d, 0x01, 0x39, 0x01, 0x82, 0x00, 0x7c, 0x00
+};
 
-    // Draw temperature value
-    u8g2_SetFont(u8g2, u8g2_font_helvB12_tf);
-    snprintf(temp_str, sizeof(temp_str), "%d.%02d", (int)temp_int, (int)temp_frac);
-    u8g2_DrawStr(u8g2, x + 15, y + 15, temp_str);
+static void DrawThermometer(u8g2_t* u8g2, int32_t temp_int, int x, int y) {
+  char temp_str[16];
 
-    // Draw degree symbol and C
-    u8g2_SetFont(u8g2, u8g2_font_helvB08_tf);
-    u8g2_DrawCircle(u8g2, x + 45, y + 8, 1, U8G2_DRAW_ALL);
-    u8g2_DrawStr(u8g2, x + 50, y + 15, "C");
+  u8g2_SetBitmapMode(u8g2, 1);
+  u8g2_SetFontMode(u8g2, 1);
 
-    // Draw temperature progress bar (0-50°C range)
-    int temp_percentage = (int)((temp_int * 100 + temp_frac) / 50); // Assuming 0-50°C range
-    if (temp_percentage > 100) temp_percentage = 100;
-    if (temp_percentage < 0) temp_percentage = 0;
+  // 绘制温度图标
+  u8g2_DrawXBM(u8g2, x, y, 16, 16, image_thermometer_bits);
 
-    DrawProgressBar(u8g2, x + 15, y + 20, 40, 4, temp_percentage, 1);
+  // 绘制温度数值和单位
+  u8g2_SetFont(u8g2, u8g2_font_helvB12_tf);
+  snprintf(temp_str, sizeof(temp_str), "%ld°C", temp_int);
+  u8g2_DrawUTF8(u8g2, x + 20, y + 15, temp_str);
 }
 
-/**
-  * @brief  Draw modern humidity icon with humidity value
-  * @param  u8g2: U8g2 structure pointer
-  * @param  humi_int: Integer part of humidity
-  * @param  humi_frac: Fractional part of humidity
-  * @param  x: X position
-  * @param  y: Y position
-  * @retval None
-  */
-static void DrawModernHumidity(u8g2_t *u8g2, int32_t humi_int, int32_t humi_frac, int x, int y) {
-    char humi_str[16];
+static void DrawHumidity(u8g2_t* u8g2, int32_t humi_int, int x, int y) {
+  char humi_str[16];
 
-    // Draw water drop icon
-    u8g2_DrawCircle(u8g2, x + 5, y + 5, 4, U8G2_DRAW_UPPER_RIGHT | U8G2_DRAW_LOWER_RIGHT);
-    u8g2_DrawVLine(u8g2, x + 5, y + 5, 4);
-    u8g2_DrawHLine(u8g2, x + 2, y + 8, 6);
+  u8g2_SetBitmapMode(u8g2, 1);
+  u8g2_SetFontMode(u8g2, 1);
 
-    // Draw humidity value
-    u8g2_SetFont(u8g2, u8g2_font_helvB12_tf);
-    snprintf(humi_str, sizeof(humi_str), "%d.%02d", (int)humi_int, (int)humi_frac);
-    u8g2_DrawStr(u8g2, x + 15, y + 15, humi_str);
+  // 绘制湿度图标
+  u8g2_DrawXBM(u8g2, x, y, 16, 16, image_humidity_drop_bits);
 
-    // Draw percentage symbol
-    u8g2_SetFont(u8g2, u8g2_font_helvB08_tf);
-    u8g2_DrawCircle(u8g2, x + 45, y + 8, 1, U8G2_DRAW_ALL);
-    u8g2_DrawVLine(u8g2, x + 47, y + 5, 6);
-
-    // Draw humidity progress bar (0-100% range)
-    int humi_percentage = (int)humi_int;
-    if (humi_percentage > 100) humi_percentage = 100;
-    if (humi_percentage < 0) humi_percentage = 0;
-
-    DrawProgressBar(u8g2, x + 15, y + 20, 40, 4, humi_percentage, 1);
+  // 绘制湿度数值和单位
+  u8g2_SetFont(u8g2, u8g2_font_helvB12_tf);
+  snprintf(humi_str, sizeof(humi_str), "%ld%%", humi_int);
+  u8g2_DrawStr(u8g2, x + 20, y + 15, humi_str);
 }
 
-/**
-  * @brief  Draw progress bar
-  * @param  u8g2: U8g2 structure pointer
-  * @param  x: X position
-  * @param  y: Y position
-  * @param  width: Bar width
-  * @param  height: Bar height
-  * @param  percentage: Progress percentage (0-100)
-  * @param  color: Bar color (0=background, 1=foreground)
-  * @retval None
-  */
-static void DrawProgressBar(u8g2_t *u8g2, int x, int y, int width, int height, int percentage, uint8_t color) {
-    int fill_width = (width * percentage) / 100;
+static void DrawProgressBar(u8g2_t* u8g2, int x, int y, int width, int height, int percentage, uint8_t color) {
+  int fill_width = (width * percentage) / 100;
 
-    // Draw background
-    u8g2_DrawFrame(u8g2, x, y, width, height);
+  // Draw background
+  u8g2_DrawFrame(u8g2, x, y, width, height);
 
-    // Draw filled portion
-    if (fill_width > 0) {
-        u8g2_DrawBox(u8g2, x + 1, y + 1, fill_width - 2, height - 2);
-    }
+  // Draw filled portion
+  if (fill_width > 0) {
+    u8g2_DrawBox(u8g2, x + 1, y + 1, fill_width - 2, height - 2);
+  }
 }
 /* USER CODE END Application */
 
