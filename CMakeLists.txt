@@ -52,6 +52,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined include paths
     Lib/DHT11
+    Lib/SSD1306/U8g2_csrc
 )
 
 # Add project symbols (macros)
