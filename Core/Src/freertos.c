@@ -92,10 +92,8 @@ const osMutexAttr_t screenUpdateMutex_attributes = {
 /* Private function prototypes -----------------------------------------------*/
 /* USER CODE BEGIN FunctionPrototypes */
 static inline void UART_Printf(UART_HandleTypeDef* huart, const char* fmt, ...);
-static inline void float_to_int_parts(float f, int32_t* int_part, int32_t* frac_part);
 static void DrawThermometer(u8g2_t *u8g2, int32_t temp_int, int x, int y);
 static void DrawHumidity(u8g2_t *u8g2, int32_t humi_int, int x, int y);
-static void DrawProgressBar(u8g2_t *u8g2, int x, int y, int width, int height, int percentage, uint8_t color);
 /* USER CODE END FunctionPrototypes */
 
 void StartLedTask(void *argument);
@@ -223,9 +221,6 @@ void StartDisplayTask(void *argument)
   DHT11_DATA_S receivedData;
   osStatus_t status;
 
-  int32_t humi_int, humi_frac;
-  int32_t temp_int, temp_frac;
-
   /* Initialize U8g2 for SSD1306 128x64 OLED display */
   u8g2_Setup_ssd1306_i2c_128x64_noname_f_hal(&u8g2, U8G2_R0);
   u8g2_InitDisplay(&u8g2);
@@ -240,16 +235,13 @@ void StartDisplayTask(void *argument)
     status = osMessageQueueGet(sensorDataQueueHandle, &receivedData, NULL, osWaitForever);
 
     if (status == osOK) {
-      float_to_int_parts(receivedData.humidity, &humi_int, &humi_frac);
-      float_to_int_parts(receivedData.temperature, &temp_int, &temp_frac);
-
       if (osMutexAcquire(screenUpdateMutexHandle, 100) == osOK) {
         u8g2_ClearBuffer(&u8g2);
 
         // 温度显示在左侧
-        DrawThermometer(&u8g2, temp_int, 2, 32);
+        DrawThermometer(&u8g2, (int)roundf(receivedData.temperature), 2, 32);
         // 湿度显示在右侧
-        DrawHumidity(&u8g2, humi_int, 70, 32);
+        DrawHumidity(&u8g2, (int)roundf(receivedData.humidity), 70, 32);
 
         u8g2_SendBuffer(&u8g2);
 
@@ -258,9 +250,6 @@ void StartDisplayTask(void *argument)
           break;
         }
       }
-
-      UART_Printf(&huart1, "[USER] Temperature: %d.%02d°C, Humidity: %d.%02d%%\r\n",
-        temp_int, temp_frac, humi_int, humi_frac);
     }
   }
   /* USER CODE END StartDisplayTask */
@@ -280,11 +269,6 @@ static inline void UART_Printf(UART_HandleTypeDef* huart, const char* fmt, ...) 
   if (len > 0) {
     HAL_UART_Transmit(huart, (uint8_t*)uart_buffer, len, HAL_MAX_DELAY);
   }
-}
-
-static inline void float_to_int_parts(float f, int32_t* int_part, int32_t* frac_part) {
-  *int_part = (int32_t)f;
-  *frac_part = abs((int32_t)((f * 100.0f)) % 100);
 }
 
 // 水滴/湿度 图标 (16x16)
@@ -329,18 +313,6 @@ static void DrawHumidity(u8g2_t* u8g2, int32_t humi_int, int x, int y) {
   u8g2_SetFont(u8g2, u8g2_font_helvB12_tf);
   snprintf(humi_str, sizeof(humi_str), "%ld%%", humi_int);
   u8g2_DrawStr(u8g2, x + 20, y + 15, humi_str);
-}
-
-static void DrawProgressBar(u8g2_t* u8g2, int x, int y, int width, int height, int percentage, uint8_t color) {
-  int fill_width = (width * percentage) / 100;
-
-  // Draw background
-  u8g2_DrawFrame(u8g2, x, y, width, height);
-
-  // Draw filled portion
-  if (fill_width > 0) {
-    u8g2_DrawBox(u8g2, x + 1, y + 1, fill_width - 2, height - 2);
-  }
 }
 /* USER CODE END Application */
 
