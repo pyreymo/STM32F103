@@ -80,6 +80,11 @@ osMessageQueueId_t sensorDataQueueHandle;
 const osMessageQueueAttr_t sensorDataQueue_attributes = {
   .name = "sensorDataQueue"
 };
+/* Definitions for screenUpdateMutex */
+osMutexId_t screenUpdateMutexHandle;
+const osMutexAttr_t screenUpdateMutex_attributes = {
+  .name = "screenUpdateMutex"
+};
 
 /* Private function prototypes -----------------------------------------------*/
 /* USER CODE BEGIN FunctionPrototypes */
@@ -103,6 +108,9 @@ void MX_FREERTOS_Init(void) {
   /* USER CODE BEGIN Init */
   UART_Printf(&huart1, "[USER] STM32 USART1 is working!\r\n");
   /* USER CODE END Init */
+  /* Create the mutex(es) */
+  /* creation of screenUpdateMutex */
+  screenUpdateMutexHandle = osMutexNew(&screenUpdateMutex_attributes);
 
   /* USER CODE BEGIN RTOS_MUTEX */
   /* add mutexes, ... */
@@ -217,6 +225,7 @@ void StartDisplayTask(void *argument)
 
   /* Infinite loop */
   for (;;) {
+    /* 仅当 */
     status = osMessageQueueGet(sensorDataQueueHandle, &receivedData, NULL, osWaitForever);
 
     if (status == osOK) {
@@ -229,8 +238,14 @@ void StartDisplayTask(void *argument)
       ssd1306_Printf(0, 20, Font_7x10, White, "Humi: %ld.%02ld %%", humi_int, humi_frac);
       ssd1306_Printf(0, 32, Font_7x10, White, "Temp: %ld.%02ld C", temp_int, temp_frac);
 
-      // FIXME: 需要加锁保护屏幕
-      ssd1306_UpdateScreen();
+      if (osMutexAcquire(screenUpdateMutexHandle, 0) == osOK) {
+          ssd1306_UpdateScreen();
+          if (osMutexRelease(screenUpdateMutexHandle) != osOK) {
+              UART_Printf(&huart1, "[USER] [FATAL] screenUpdateMutexHandle release failed!\r\n");
+              break;
+          }
+      }
+
       UART_Printf(&huart1, "[USER] screen updated!\r\n");
     }
   }
