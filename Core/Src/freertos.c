@@ -30,7 +30,6 @@
 #include <stdlib.h>
 
 #include "DHT11.h"
-#include "ssd1306_fonts.h"
 #include "tim.h"
 #include "usart.h"
 /* USER CODE END Includes */
@@ -88,7 +87,6 @@ const osMutexAttr_t screenUpdateMutex_attributes = {
 
 /* Private function prototypes -----------------------------------------------*/
 /* USER CODE BEGIN FunctionPrototypes */
-static inline void ssd1306_Printf(uint8_t x, uint8_t y, SSD1306_Font_t font, SSD1306_COLOR color, const char* fmt, ...);
 static inline void UART_Printf(UART_HandleTypeDef* huart, const char* fmt, ...);
 static inline void float_to_int_parts(float f, int32_t* int_part, int32_t* frac_part);
 /* USER CODE END FunctionPrototypes */
@@ -221,25 +219,21 @@ void StartDisplayTask(void *argument)
   int32_t humi_int, humi_frac;
   int32_t temp_int, temp_frac;
 
-  ssd1306_Init();
+  /* TODO: SSD1306 驱动初始化 */
 
   /* Infinite loop */
   for (;;) {
-    /* 仅当 */
+    /* 队列存在信息时会解除阻塞；平时会阻塞在这里，不会占用CPU */
     status = osMessageQueueGet(sensorDataQueueHandle, &receivedData, NULL, osWaitForever);
 
     if (status == osOK) {
       float_to_int_parts(receivedData.humidity, &humi_int, &humi_frac);
       float_to_int_parts(receivedData.temperature, &temp_int, &temp_frac);
 
-      ssd1306_Fill(Black);
-
-      ssd1306_Printf(0, 0, Font_7x10, White, "System Info");
-      ssd1306_Printf(0, 20, Font_7x10, White, "Humi: %ld.%02ld %%", humi_int, humi_frac);
-      ssd1306_Printf(0, 32, Font_7x10, White, "Temp: %ld.%02ld C", temp_int, temp_frac);
+      /* TODO: 准备屏幕数据 */
 
       if (osMutexAcquire(screenUpdateMutexHandle, 0) == osOK) {
-          ssd1306_UpdateScreen();
+          /* TODO: 更新屏幕 */
           if (osMutexRelease(screenUpdateMutexHandle) != osOK) {
               UART_Printf(&huart1, "[USER] [FATAL] screenUpdateMutexHandle release failed!\r\n");
               break;
@@ -253,19 +247,6 @@ void StartDisplayTask(void *argument)
 }
 
 /* Private application code --------------------------------------------------*/
-/* USER CODE BEGIN Application */
-static inline void ssd1306_Printf(uint8_t x, uint8_t y, SSD1306_Font_t font, SSD1306_COLOR color, const char* fmt, ...) {
-    static char oled_buffer[128];
-
-    va_list args;
-    va_start(args, fmt);
-    vsnprintf(oled_buffer, sizeof(oled_buffer), fmt, args);
-    va_end(args);
-
-    ssd1306_SetCursor(x, y);
-    ssd1306_WriteString(oled_buffer, font, color);
-}
-
 static inline void UART_Printf(UART_HandleTypeDef* huart, const char* fmt, ...) {
     static char uart_buffer[256];
 
