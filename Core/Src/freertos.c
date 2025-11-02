@@ -25,12 +25,16 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include <math.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "DHT11.h"
 #include "tim.h"
+#include "u8g2.h"
+#include "u8g2_stm32_hal.h"
 #include "usart.h"
 /* USER CODE END Includes */
 
@@ -51,7 +55,7 @@
 
 /* Private variables ---------------------------------------------------------*/
 /* USER CODE BEGIN Variables */
-
+static u8g2_t u8g2;
 /* USER CODE END Variables */
 /* Definitions for ledTask */
 osThreadId_t ledTaskHandle;
@@ -89,6 +93,9 @@ const osMutexAttr_t screenUpdateMutex_attributes = {
 /* USER CODE BEGIN FunctionPrototypes */
 static inline void UART_Printf(UART_HandleTypeDef* huart, const char* fmt, ...);
 static inline void float_to_int_parts(float f, int32_t* int_part, int32_t* frac_part);
+static void DrawModernThermometer(u8g2_t *u8g2, int32_t temp_int, int32_t temp_frac, int x, int y);
+static void DrawModernHumidity(u8g2_t *u8g2, int32_t humi_int, int32_t humi_frac, int x, int y);
+static void DrawProgressBar(u8g2_t *u8g2, int x, int y, int width, int height, int percentage, uint8_t color);
 /* USER CODE END FunctionPrototypes */
 
 void StartLedTask(void *argument);
@@ -219,7 +226,13 @@ void StartDisplayTask(void *argument)
   int32_t humi_int, humi_frac;
   int32_t temp_int, temp_frac;
 
-  /* TODO: SSD1306 驱动初始化 */
+  /* Initialize U8g2 for SSD1306 128x64 OLED display */
+  u8g2_Setup_ssd1306_i2c_128x64_noname_f_hal(&u8g2, U8G2_R0);
+  u8g2_InitDisplay(&u8g2);
+  u8g2_SetPowerSave(&u8g2, 0);
+  u8g2_ClearDisplay(&u8g2);
+
+  UART_Printf(&huart1, "[USER] SSD1306 display initialized\r\n");
 
   /* Infinite loop */
   for (;;) {
@@ -230,17 +243,32 @@ void StartDisplayTask(void *argument)
       float_to_int_parts(receivedData.humidity, &humi_int, &humi_frac);
       float_to_int_parts(receivedData.temperature, &temp_int, &temp_frac);
 
-      /* TODO: 准备屏幕数据 */
+      if (osMutexAcquire(screenUpdateMutexHandle, 100) == osOK) {
+        /* Clear the display buffer */
+        u8g2_ClearBuffer(&u8g2);
 
-      if (osMutexAcquire(screenUpdateMutexHandle, 0) == osOK) {
-          /* TODO: 更新屏幕 */
-          if (osMutexRelease(screenUpdateMutexHandle) != osOK) {
-              UART_Printf(&huart1, "[USER] [FATAL] screenUpdateMutexHandle release failed!\r\n");
-              break;
-          }
+        /* Draw modern UI elements */
+        DrawModernThermometer(&u8g2, temp_int, temp_frac, 10, 10);
+        DrawModernHumidity(&u8g2, humi_int, humi_frac, 10, 40);
+
+        /* Draw title */
+        u8g2_SetFont(&u8g2, u8g2_font_helvB12_tf);
+        u8g2_DrawStr(&u8g2, 25, 8, "DHT11 Monitor");
+
+        /* Draw separator line */
+        u8g2_DrawHLine(&u8g2, 0, 15, 128);
+
+        /* Send the buffer to the display */
+        u8g2_SendBuffer(&u8g2);
+
+        if (osMutexRelease(screenUpdateMutexHandle) != osOK) {
+            UART_Printf(&huart1, "[USER] [FATAL] screenUpdateMutexHandle release failed!\r\n");
+            break;
+        }
       }
 
-      UART_Printf(&huart1, "[USER] screen updated!\r\n");
+      UART_Printf(&huart1, "[USER] Temperature: %d.%02d°C, Humidity: %d.%02d%%\r\n",
+                  temp_int, temp_frac, humi_int, humi_frac);
     }
   }
   /* USER CODE END StartDisplayTask */
@@ -265,6 +293,99 @@ static inline void UART_Printf(UART_HandleTypeDef* huart, const char* fmt, ...) 
 static inline void float_to_int_parts(float f, int32_t* int_part, int32_t* frac_part) {
     *int_part = (int32_t)f;
     *frac_part = abs((int32_t)((f * 100.0f)) % 100);
+}
+
+/**
+  * @brief  Draw modern thermometer icon with temperature value
+  * @param  u8g2: U8g2 structure pointer
+  * @param  temp_int: Integer part of temperature
+  * @param  temp_frac: Fractional part of temperature
+  * @param  x: X position
+  * @param  y: Y position
+  * @retval None
+  */
+static void DrawModernThermometer(u8g2_t *u8g2, int32_t temp_int, int32_t temp_frac, int x, int y) {
+    char temp_str[16];
+
+    // Draw thermometer icon
+    u8g2_DrawCircle(u8g2, x + 5, y + 20, 4, U8G2_DRAW_ALL);
+    u8g2_DrawVLine(u8g2, x + 5, y + 5, 15);
+    u8g2_DrawCircle(u8g2, x + 5, y + 10, 2, U8G2_DRAW_ALL);
+
+    // Draw temperature value
+    u8g2_SetFont(u8g2, u8g2_font_helvB12_tf);
+    snprintf(temp_str, sizeof(temp_str), "%d.%02d", (int)temp_int, (int)temp_frac);
+    u8g2_DrawStr(u8g2, x + 15, y + 15, temp_str);
+
+    // Draw degree symbol and C
+    u8g2_SetFont(u8g2, u8g2_font_helvB08_tf);
+    u8g2_DrawCircle(u8g2, x + 45, y + 8, 1, U8G2_DRAW_ALL);
+    u8g2_DrawStr(u8g2, x + 50, y + 15, "C");
+
+    // Draw temperature progress bar (0-50°C range)
+    int temp_percentage = (int)((temp_int * 100 + temp_frac) / 50); // Assuming 0-50°C range
+    if (temp_percentage > 100) temp_percentage = 100;
+    if (temp_percentage < 0) temp_percentage = 0;
+
+    DrawProgressBar(u8g2, x + 15, y + 20, 40, 4, temp_percentage, 1);
+}
+
+/**
+  * @brief  Draw modern humidity icon with humidity value
+  * @param  u8g2: U8g2 structure pointer
+  * @param  humi_int: Integer part of humidity
+  * @param  humi_frac: Fractional part of humidity
+  * @param  x: X position
+  * @param  y: Y position
+  * @retval None
+  */
+static void DrawModernHumidity(u8g2_t *u8g2, int32_t humi_int, int32_t humi_frac, int x, int y) {
+    char humi_str[16];
+
+    // Draw water drop icon
+    u8g2_DrawCircle(u8g2, x + 5, y + 5, 4, U8G2_DRAW_UPPER_RIGHT | U8G2_DRAW_LOWER_RIGHT);
+    u8g2_DrawVLine(u8g2, x + 5, y + 5, 4);
+    u8g2_DrawHLine(u8g2, x + 2, y + 8, 6);
+
+    // Draw humidity value
+    u8g2_SetFont(u8g2, u8g2_font_helvB12_tf);
+    snprintf(humi_str, sizeof(humi_str), "%d.%02d", (int)humi_int, (int)humi_frac);
+    u8g2_DrawStr(u8g2, x + 15, y + 15, humi_str);
+
+    // Draw percentage symbol
+    u8g2_SetFont(u8g2, u8g2_font_helvB08_tf);
+    u8g2_DrawCircle(u8g2, x + 45, y + 8, 1, U8G2_DRAW_ALL);
+    u8g2_DrawVLine(u8g2, x + 47, y + 5, 6);
+
+    // Draw humidity progress bar (0-100% range)
+    int humi_percentage = (int)humi_int;
+    if (humi_percentage > 100) humi_percentage = 100;
+    if (humi_percentage < 0) humi_percentage = 0;
+
+    DrawProgressBar(u8g2, x + 15, y + 20, 40, 4, humi_percentage, 1);
+}
+
+/**
+  * @brief  Draw progress bar
+  * @param  u8g2: U8g2 structure pointer
+  * @param  x: X position
+  * @param  y: Y position
+  * @param  width: Bar width
+  * @param  height: Bar height
+  * @param  percentage: Progress percentage (0-100)
+  * @param  color: Bar color (0=background, 1=foreground)
+  * @retval None
+  */
+static void DrawProgressBar(u8g2_t *u8g2, int x, int y, int width, int height, int percentage, uint8_t color) {
+    int fill_width = (width * percentage) / 100;
+
+    // Draw background
+    u8g2_DrawFrame(u8g2, x, y, width, height);
+
+    // Draw filled portion
+    if (fill_width > 0) {
+        u8g2_DrawBox(u8g2, x + 1, y + 1, fill_width - 2, height - 2);
+    }
 }
 /* USER CODE END Application */
 

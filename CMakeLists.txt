@@ -46,12 +46,48 @@ target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user sources here
     Lib/DHT11/DHT11.c
+    Lib/SSD1306/u8g2_stm32_hal.c
+    Lib/SSD1306/U8g2_csrc/u8g2_setup.c
+    Lib/SSD1306/U8g2_csrc/u8g2_buffer.c
+    Lib/SSD1306/U8g2_csrc/u8g2_font.c
+    Lib/SSD1306/U8g2_csrc/u8g2_fonts.c
+    Lib/SSD1306/U8g2_csrc/u8g2_line.c
+    Lib/SSD1306/U8g2_csrc/u8g2_box.c
+    Lib/SSD1306/U8g2_csrc/u8g2_circle.c
+    Lib/SSD1306/U8g2_csrc/u8g2_arc.c
+    Lib/SSD1306/U8g2_csrc/u8g2_polygon.c
+    Lib/SSD1306/U8g2_csrc/u8g2_bitmap.c
+    Lib/SSD1306/U8g2_csrc/u8g2_button.c
+    Lib/SSD1306/U8g2_csrc/u8g2_cleardisplay.c
+    Lib/SSD1306/U8g2_csrc/u8g2_d_memory.c
+    Lib/SSD1306/U8g2_csrc/u8g2_d_setup.c
+    Lib/SSD1306/U8g2_csrc/u8g2_hvline.c
+    Lib/SSD1306/U8g2_csrc/u8g2_intersection.c
+    Lib/SSD1306/U8g2_csrc/u8g2_kerning.c
+    Lib/SSD1306/U8g2_csrc/u8g2_ll_hvline.c
+    Lib/SSD1306/U8g2_csrc/u8x8_8x8.c
+    Lib/SSD1306/U8g2_csrc/u8x8_byte.c
+    Lib/SSD1306/U8g2_csrc/u8x8_cad.c
+    Lib/SSD1306/U8g2_csrc/u8x8_display.c
+    Lib/SSD1306/U8g2_csrc/u8x8_fonts.c
+    Lib/SSD1306/U8g2_csrc/u8x8_gpio.c
+    Lib/SSD1306/U8g2_csrc/u8x8_setup.c
+    Lib/SSD1306/U8g2_csrc/u8x8_string.c
+    Lib/SSD1306/U8g2_csrc/u8x8_u8toa.c
+    Lib/SSD1306/U8g2_csrc/u8x8_u16toa.c
+    Lib/SSD1306/U8g2_csrc/u8x8_selection_list.c
+    Lib/SSD1306/U8g2_csrc/u8x8_input_value.c
+    Lib/SSD1306/U8g2_csrc/u8x8_message.c
+    Lib/SSD1306/U8g2_csrc/u8x8_debounce.c
+    Lib/SSD1306/U8g2_csrc/u8x8_capture.c
+    Lib/SSD1306/U8g2_csrc/u8x8_d_ssd1306_128x64_noname.c
 )
 
 # Add include paths
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined include paths
     Lib/DHT11
+    Lib/SSD1306
     Lib/SSD1306/U8g2_csrc
 )
 
