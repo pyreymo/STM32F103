@@ -23,10 +23,10 @@
 #define BLINK_CLOSED_MS 60
 #define BLINK_INTERVAL_MIN_MS 4000
 #define BLINK_INTERVAL_MAX_MS 8000
-#define LOOK_INTERVAL_MIN_MS 3000
-#define LOOK_INTERVAL_MAX_MS 7000
+#define LOOK_INTERVAL_MIN_MS 6000
+#define LOOK_INTERVAL_MAX_MS 15000
 #define LOOK_DURATION_MIN_MS 1000
-#define LOOK_DURATION_MAX_MS 2500
+#define LOOK_DURATION_MAX_MS 5000
 
 typedef struct Animation_t Animation_t;
 typedef struct Face_t Face_t;
@@ -35,7 +35,12 @@ struct Animation_t {
   void (*start)(Animation_t* self, uint32_t currentTime);
   Animation_t* (*update)(Animation_t* self, uint32_t currentTime);
   void (*draw)(Animation_t* self, u8g2_t* u8g2, uint32_t currentTime);
+  void (*pause)(Animation_t* self, uint32_t currentTime);
+  void (*resume)(Animation_t* self, uint32_t currentTime);
+  int (*get_offset_x)(Animation_t* self, uint32_t currentTime);
   Face_t* face;
+  bool isPaused;
+  uint32_t pausedElapsed;
 };
 
 typedef enum { BLINK_STATE_CLOSING, BLINK_STATE_CLOSED, BLINK_STATE_OPENING } BlinkInternalState_t;
@@ -45,7 +50,6 @@ typedef struct {
   uint32_t startTime;
   BlinkInternalState_t internalState;
   Animation_t* returnAnimation;
-  uint32_t pausedElapsed;
 } BlinkAnimation_t;
 
 typedef struct {
@@ -73,14 +77,23 @@ struct Face_t {
 static void NormalEyes_start(Animation_t* self, uint32_t currentTime);
 static Animation_t* NormalEyes_update(Animation_t* self, uint32_t currentTime);
 static void NormalEyes_draw(Animation_t* self, u8g2_t* u8g2, uint32_t currentTime);
+static void NormalEyes_pause(Animation_t* self, uint32_t currentTime);
+static void NormalEyes_resume(Animation_t* self, uint32_t currentTime);
+static int NormalEyes_get_offset_x(Animation_t* self, uint32_t currentTime);
 
 static void Blink_start(Animation_t* self, uint32_t currentTime);
 static Animation_t* Blink_update(Animation_t* self, uint32_t currentTime);
 static void Blink_draw(Animation_t* self, u8g2_t* u8g2, uint32_t currentTime);
+static void Blink_pause(Animation_t* self, uint32_t currentTime);
+static void Blink_resume(Animation_t* self, uint32_t currentTime);
+static int Blink_get_offset_x(Animation_t* self, uint32_t currentTime);
 
 static void Look_start(Animation_t* self, uint32_t currentTime);
 static Animation_t* Look_update(Animation_t* self, uint32_t currentTime);
 static void Look_draw(Animation_t* self, u8g2_t* u8g2, uint32_t currentTime);
+static void Look_pause(Animation_t* self, uint32_t currentTime);
+static void Look_resume(Animation_t* self, uint32_t currentTime);
+static int Look_get_offset_x(Animation_t* self, uint32_t currentTime);
 
 Face_t* Face_Create(void) {
   Face_t* face = (Face_t*)calloc(1, sizeof(Face_t));
@@ -91,17 +104,32 @@ Face_t* Face_Create(void) {
   face->normalEyes.base.start = NormalEyes_start;
   face->normalEyes.base.update = NormalEyes_update;
   face->normalEyes.base.draw = NormalEyes_draw;
+  face->normalEyes.base.pause = NormalEyes_pause;
+  face->normalEyes.base.resume = NormalEyes_resume;
+  face->normalEyes.base.get_offset_x = NormalEyes_get_offset_x;
   face->normalEyes.base.face = face;
+  face->normalEyes.base.isPaused = false;
+  face->normalEyes.base.pausedElapsed = 0;
 
   face->blink.base.start = Blink_start;
   face->blink.base.update = Blink_update;
   face->blink.base.draw = Blink_draw;
+  face->blink.base.pause = Blink_pause;
+  face->blink.base.resume = Blink_resume;
+  face->blink.base.get_offset_x = Blink_get_offset_x;
   face->blink.base.face = face;
+  face->blink.base.isPaused = false;
+  face->blink.base.pausedElapsed = 0;
 
   face->look.base.start = Look_start;
   face->look.base.update = Look_update;
   face->look.base.draw = Look_draw;
+  face->look.base.pause = Look_pause;
+  face->look.base.resume = Look_resume;
+  face->look.base.get_offset_x = Look_get_offset_x;
   face->look.base.face = face;
+  face->look.base.isPaused = false;
+  face->look.base.pausedElapsed = 0;
 
   Face_Init(face);
   return face;
@@ -135,17 +163,17 @@ void Face_Update(Face_t* face, uint32_t currentTime) {
   if (!face || !face->currentAnimation) {
     return;
   }
-  int is_return_from_blink = 0;
   Animation_t* nextAnimation = face->currentAnimation->update(face->currentAnimation, currentTime);
   if (nextAnimation != face->currentAnimation) {
-    if (face->currentAnimation == &face->blink.base && nextAnimation == face->blink.returnAnimation) {
-      is_return_from_blink = 1;
-    }
+    bool is_return_from_blink = (face->currentAnimation == &face->blink.base);
     if (nextAnimation == &face->blink.base) {
+      face->currentAnimation->pause(face->currentAnimation, currentTime);
       face->blink.returnAnimation = face->currentAnimation;
     }
     face->currentAnimation = nextAnimation;
-    if (!is_return_from_blink) {
+    if (is_return_from_blink) {
+      face->currentAnimation->resume(face->currentAnimation, currentTime);
+    } else {
       face->currentAnimation->start(face->currentAnimation, currentTime);
     }
   }
@@ -195,20 +223,31 @@ static Animation_t* NormalEyes_update(Animation_t* self, uint32_t currentTime) {
 }
 
 static void NormalEyes_draw(Animation_t* self, u8g2_t* u8g2, uint32_t currentTime) {
+  DrawEyes(u8g2, EYE_HEIGHT, self->get_offset_x(self, currentTime));
+}
+
+static void NormalEyes_pause(Animation_t* self, uint32_t currentTime) {
   (void)self;
   (void)currentTime;
-  DrawEyes(u8g2, EYE_HEIGHT, 0);
+  // No-op, as this animation has no time-dependent state beyond nextLookTime (which isn't paused)
+}
+
+static void NormalEyes_resume(Animation_t* self, uint32_t currentTime) {
+  (void)self;
+  (void)currentTime;
+  // No-op
+}
+
+static int NormalEyes_get_offset_x(Animation_t* self, uint32_t currentTime) {
+  (void)self;
+  (void)currentTime;
+  return 0;
 }
 
 static void Blink_start(Animation_t* self, uint32_t currentTime) {
   BlinkAnimation_t* anim = (BlinkAnimation_t*)self;
   anim->startTime = currentTime;
   anim->internalState = BLINK_STATE_CLOSING;
-  anim->pausedElapsed = 0;
-  if (anim->returnAnimation == &self->face->look.base) {
-    LookAnimation_t* look_anim = (LookAnimation_t*)anim->returnAnimation;
-    anim->pausedElapsed = currentTime - look_anim->startTime;
-  }
 }
 
 static Animation_t* Blink_update(Animation_t* self, uint32_t currentTime) {
@@ -224,10 +263,6 @@ static Animation_t* Blink_update(Animation_t* self, uint32_t currentTime) {
     case BLINK_STATE_OPENING:
       if (elapsedTime > BLINK_DURATION_MS + BLINK_CLOSED_MS + BLINK_DURATION_MS) {
         self->face->nextBlinkTime = GetNextBlinkTime(currentTime);
-        if (anim->returnAnimation == &self->face->look.base) {
-          LookAnimation_t* look_anim = (LookAnimation_t*)anim->returnAnimation;
-          look_anim->startTime = currentTime - anim->pausedElapsed;
-        }
         return anim->returnAnimation;
       }
       break;
@@ -240,15 +275,7 @@ static void Blink_draw(Animation_t* self, u8g2_t* u8g2, uint32_t currentTime) {
   float eye_height_multiplier = 1.0f;
   uint32_t elapsedTime = currentTime - anim->startTime;
   float progress;
-  int current_look_offset = 0;
-  if (anim->returnAnimation == &self->face->look.base) {
-    LookAnimation_t* look_anim = (LookAnimation_t*)anim->returnAnimation;
-    uint32_t virtual_elapsed = currentTime - look_anim->startTime;
-    progress = fminf((float)virtual_elapsed / LOOK_TRANSITION_MS, 1.0f);
-    float eased_progress = sinf(progress * PI * 0.5f);
-    current_look_offset =
-        look_anim->start_offset_x + (int)((look_anim->target_offset_x - look_anim->start_offset_x) * eased_progress);
-  }
+  int current_look_offset = anim->returnAnimation->get_offset_x(anim->returnAnimation, currentTime);
   switch (anim->internalState) {
     case BLINK_STATE_CLOSING:
       progress = fminf((float)elapsedTime / BLINK_DURATION_MS, 1.0f);
@@ -267,11 +294,31 @@ static void Blink_draw(Animation_t* self, u8g2_t* u8g2, uint32_t currentTime) {
   DrawEyes(u8g2, current_eye_height, current_look_offset);
 }
 
+static void Blink_pause(Animation_t* self, uint32_t currentTime) {
+  (void)self;
+  (void)currentTime;
+  // No-op, as blink is not paused in this system
+}
+
+static void Blink_resume(Animation_t* self, uint32_t currentTime) {
+  (void)self;
+  (void)currentTime;
+  // No-op
+}
+
+static int Blink_get_offset_x(Animation_t* self, uint32_t currentTime) {
+  (void)self;
+  (void)currentTime;
+  return 0;  // Not applicable
+}
+
 static void Look_start(Animation_t* self, uint32_t currentTime) {
   LookAnimation_t* anim = (LookAnimation_t*)self;
   uint32_t hold_duration = GetRandomInterval(LOOK_DURATION_MIN_MS, LOOK_DURATION_MAX_MS);
   anim->startTime = currentTime;
-  anim->holdUntilTime = currentTime + LOOK_TRANSITION_MS + hold_duration;
+  anim->holdUntilTime =
+      currentTime + LOOK_TRANSITION_MS + hold_duration + LOOK_TRANSITION_MS;  // Account for return transition
+  self->isPaused = false;
 }
 
 static Animation_t* Look_update(Animation_t* self, uint32_t currentTime) {
@@ -280,16 +327,41 @@ static Animation_t* Look_update(Animation_t* self, uint32_t currentTime) {
     return &self->face->blink.base;
   }
   if (currentTime >= anim->holdUntilTime) {
+    self->face->normalEyes.nextLookTime = GetNextLookTime(currentTime);
     return &self->face->normalEyes.base;
   }
   return self;
 }
 
 static void Look_draw(Animation_t* self, u8g2_t* u8g2, uint32_t currentTime) {
+  DrawEyes(u8g2, EYE_HEIGHT, self->get_offset_x(self, currentTime));
+}
+
+static void Look_pause(Animation_t* self, uint32_t currentTime) {
   LookAnimation_t* anim = (LookAnimation_t*)self;
-  uint32_t elapsedTime = currentTime - anim->startTime;
-  float progress = fminf((float)elapsedTime / LOOK_TRANSITION_MS, 1.0f);
+  if (!self->isPaused) {
+    self->pausedElapsed = currentTime - anim->startTime;
+    self->isPaused = true;
+  }
+}
+
+static void Look_resume(Animation_t* self, uint32_t currentTime) {
+  LookAnimation_t* anim = (LookAnimation_t*)self;
+  if (self->isPaused) {
+    anim->startTime = currentTime - self->pausedElapsed;
+    self->isPaused = false;
+  }
+}
+
+static int Look_get_offset_x(Animation_t* self, uint32_t currentTime) {
+  LookAnimation_t* anim = (LookAnimation_t*)self;
+  uint32_t elapsed;
+  if (self->isPaused) {
+    elapsed = self->pausedElapsed;
+  } else {
+    elapsed = currentTime - anim->startTime;
+  }
+  float progress = fminf((float)elapsed / LOOK_TRANSITION_MS, 1.0f);
   float eased_progress = sinf(progress * PI * 0.5f);
-  int current_offset_x = anim->start_offset_x + (int)((anim->target_offset_x - anim->start_offset_x) * eased_progress);
-  DrawEyes(u8g2, EYE_HEIGHT, current_offset_x);
+  return anim->start_offset_x + (int)((anim->target_offset_x - anim->start_offset_x) * eased_progress);
 }
