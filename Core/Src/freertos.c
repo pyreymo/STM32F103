@@ -222,12 +222,14 @@ void StartDisplayTask(void *argument)
   DHT11_DATA_S receivedData = {0};
   osStatus_t status;
 
-  /* 试了半天，发现硬件实际上是sh1106 */
   u8g2_Setup_sh1106_i2c_128x64_noname_f_hal(&u8g2, U8G2_R0);
   u8g2_InitDisplay(&u8g2);
   u8g2_SetPowerSave(&u8g2, 0);
 
-  Face_Init();
+  Face_t* myFace = Face_Create();
+  if (myFace == NULL) {
+    UART_Printf(&huart1, "[USER] Face init failed!\r\n");
+  }
 
   UART_Printf(&huart1, "[USER] SSD1306 display initialized\r\n");
 
@@ -235,7 +237,7 @@ void StartDisplayTask(void *argument)
   for (;;) {
     uint32_t currentTime = osKernelGetTickCount();
 
-    Face_Update(currentTime);
+    Face_Update(myFace, currentTime);
 
     status = osMessageQueueGet(sensorDataQueueHandle, &receivedData, NULL, 16);
 
@@ -243,7 +245,7 @@ void StartDisplayTask(void *argument)
       if (osMutexAcquire(screenUpdateMutexHandle, 100) == osOK) {
         u8g2_ClearBuffer(&u8g2);
 
-        Face_Draw(&u8g2, currentTime);
+        Face_Draw(myFace, &u8g2, currentTime);
 
         u8g2_SendBuffer(&u8g2);
 
@@ -254,6 +256,8 @@ void StartDisplayTask(void *argument)
       }
     }
   }
+
+  Face_Destroy(myFace);
   /* USER CODE END StartDisplayTask */
 }
 
