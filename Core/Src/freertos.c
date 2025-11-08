@@ -232,7 +232,7 @@ void StartDisplayTask(void *argument)
 
   UART_Printf(&huart1, "[USER] SSD1306 display initialized\r\n");
 
-  const uint32_t FRAME_RATE = 60;
+  const uint32_t FRAME_RATE = 20;
   const uint32_t FRAME_PERIOD_MS = 1000 / FRAME_RATE;
 
   uint32_t lastWakeTime = osKernelGetTickCount();
@@ -268,6 +268,8 @@ void StartDisplayTask(void *argument)
     } else {
       UART_Printf(&huart1, "[USER] [WARN] Skip frame, mutex busy.\r\n");
     }
+
+    // UART_Printf(&huart1, "Frame time: %d ms\r\n", osKernelGetTickCount() - currentTime);
   }
 
   Face_Destroy(myFace);

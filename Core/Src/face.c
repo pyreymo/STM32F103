@@ -45,6 +45,7 @@ typedef struct {
   uint32_t startTime;
   BlinkInternalState_t internalState;
   Animation_t* returnAnimation;
+  uint32_t pausedElapsed;
 } BlinkAnimation_t;
 
 typedef struct {
@@ -134,13 +135,19 @@ void Face_Update(Face_t* face, uint32_t currentTime) {
   if (!face || !face->currentAnimation) {
     return;
   }
+  int is_return_from_blink = 0;
   Animation_t* nextAnimation = face->currentAnimation->update(face->currentAnimation, currentTime);
   if (nextAnimation != face->currentAnimation) {
+    if (face->currentAnimation == &face->blink.base && nextAnimation == face->blink.returnAnimation) {
+      is_return_from_blink = 1;
+    }
     if (nextAnimation == &face->blink.base) {
       face->blink.returnAnimation = face->currentAnimation;
     }
     face->currentAnimation = nextAnimation;
-    face->currentAnimation->start(face->currentAnimation, currentTime);
+    if (!is_return_from_blink) {
+      face->currentAnimation->start(face->currentAnimation, currentTime);
+    }
   }
 }
 
@@ -197,7 +204,13 @@ static void Blink_start(Animation_t* self, uint32_t currentTime) {
   BlinkAnimation_t* anim = (BlinkAnimation_t*)self;
   anim->startTime = currentTime;
   anim->internalState = BLINK_STATE_CLOSING;
+  anim->pausedElapsed = 0;
+  if (anim->returnAnimation == &self->face->look.base) {
+    LookAnimation_t* look_anim = (LookAnimation_t*)anim->returnAnimation;
+    anim->pausedElapsed = currentTime - look_anim->startTime;
+  }
 }
+
 static Animation_t* Blink_update(Animation_t* self, uint32_t currentTime) {
   BlinkAnimation_t* anim = (BlinkAnimation_t*)self;
   uint32_t elapsedTime = currentTime - anim->startTime;
@@ -211,6 +224,10 @@ static Animation_t* Blink_update(Animation_t* self, uint32_t currentTime) {
     case BLINK_STATE_OPENING:
       if (elapsedTime > BLINK_DURATION_MS + BLINK_CLOSED_MS + BLINK_DURATION_MS) {
         self->face->nextBlinkTime = GetNextBlinkTime(currentTime);
+        if (anim->returnAnimation == &self->face->look.base) {
+          LookAnimation_t* look_anim = (LookAnimation_t*)anim->returnAnimation;
+          look_anim->startTime = currentTime - anim->pausedElapsed;
+        }
         return anim->returnAnimation;
       }
       break;
@@ -226,7 +243,11 @@ static void Blink_draw(Animation_t* self, u8g2_t* u8g2, uint32_t currentTime) {
   int current_look_offset = 0;
   if (anim->returnAnimation == &self->face->look.base) {
     LookAnimation_t* look_anim = (LookAnimation_t*)anim->returnAnimation;
-    current_look_offset = look_anim->target_offset_x;
+    uint32_t virtual_elapsed = currentTime - look_anim->startTime;
+    progress = fminf((float)virtual_elapsed / LOOK_TRANSITION_MS, 1.0f);
+    float eased_progress = sinf(progress * PI * 0.5f);
+    current_look_offset =
+        look_anim->start_offset_x + (int)((look_anim->target_offset_x - look_anim->start_offset_x) * eased_progress);
   }
   switch (anim->internalState) {
     case BLINK_STATE_CLOSING:
