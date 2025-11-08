@@ -92,9 +92,7 @@ const osMutexAttr_t screenUpdateMutex_attributes = {
 
 /* Private function prototypes -----------------------------------------------*/
 /* USER CODE BEGIN FunctionPrototypes */
-static inline void UART_Printf(UART_HandleTypeDef* huart, const char* fmt, ...);
-static void DrawThermometer(u8g2_t *u8g2, int32_t temp_int, int x, int y);
-static void DrawHumidity(u8g2_t *u8g2, int32_t humi_int, int x, int y);
+
 /* USER CODE END FunctionPrototypes */
 
 void StartLedTask(void *argument);
@@ -228,32 +226,47 @@ void StartDisplayTask(void *argument)
 
   Face_t* myFace = Face_Create();
   if (myFace == NULL) {
-    UART_Printf(&huart1, "[USER] Face init failed!\r\n");
+    UART_Printf(&huart1, "[USER] Face creation failed!\r\n");
+    osThreadTerminate(NULL);
   }
 
   UART_Printf(&huart1, "[USER] SSD1306 display initialized\r\n");
 
+  const uint32_t FRAME_RATE = 60;
+  const uint32_t FRAME_PERIOD_MS = 1000 / FRAME_RATE;
+
+  uint32_t lastWakeTime = osKernelGetTickCount();
+
   /* Infinite loop */
   for (;;) {
+    uint32_t nextWakeTime = lastWakeTime + FRAME_PERIOD_MS;
     uint32_t currentTime = osKernelGetTickCount();
+
+    if (nextWakeTime > currentTime) {
+      osDelay(nextWakeTime - currentTime);
+    }
+
+    lastWakeTime = nextWakeTime;
+
+    currentTime = osKernelGetTickCount();
+
+    status = osMessageQueueGet(sensorDataQueueHandle, &receivedData, NULL, 0);
+    if (status == osOK) {  // do nothing for now
+    }
 
     Face_Update(myFace, currentTime);
 
-    status = osMessageQueueGet(sensorDataQueueHandle, &receivedData, NULL, 16);
+    if (osMutexAcquire(screenUpdateMutexHandle, 10) == osOK) {
+      u8g2_ClearBuffer(&u8g2);
+      Face_Draw(myFace, &u8g2, currentTime);
+      u8g2_SendBuffer(&u8g2);
 
-    if (status == osOK || status == osErrorTimeout) {
-      if (osMutexAcquire(screenUpdateMutexHandle, 100) == osOK) {
-        u8g2_ClearBuffer(&u8g2);
-
-        Face_Draw(myFace, &u8g2, currentTime);
-
-        u8g2_SendBuffer(&u8g2);
-
-        if (osMutexRelease(screenUpdateMutexHandle) != osOK) {
-          UART_Printf(&huart1, "[USER] [FATAL] screenUpdateMutexHandle release failed!\r\n");
-          break;
-        }
+      if (osMutexRelease(screenUpdateMutexHandle) != osOK) {
+        UART_Printf(&huart1, "[USER] [FATAL] screenUpdateMutexHandle release failed!\r\n");
+        break;
       }
+    } else {
+      UART_Printf(&huart1, "[USER] [WARN] Skip frame, mutex busy.\r\n");
     }
   }
 
@@ -262,63 +275,7 @@ void StartDisplayTask(void *argument)
 }
 
 /* Private application code --------------------------------------------------*/
-static inline void UART_Printf(UART_HandleTypeDef* huart, const char* fmt, ...) {
-  static char uart_buffer[256];
+/* USER CODE BEGIN Application */
 
-  va_list args;
-  va_start(args, fmt);
-
-  int len = vsnprintf(uart_buffer, sizeof(uart_buffer), fmt, args);
-
-  va_end(args);
-
-  if (len > 0) {
-    HAL_UART_Transmit(huart, (uint8_t*)uart_buffer, len, HAL_MAX_DELAY);
-  }
-}
-
-// 水滴/湿度 图标 (16x16)
-static const uint8_t image_humidity_drop_bits[] = {
-    0x20, 0x00, 0x20, 0x00, 0x30, 0x00, 0x70, 0x00, 0x78, 0x00, 0xf8, 0x00, 
-    0xfc, 0x01, 0xfc, 0x01, 0x7e, 0x03, 0xfe, 0x02, 0xff, 0x06, 0xff, 0x07, 
-    0xfe, 0x03, 0xfe, 0x03, 0xfc, 0x01, 0xf0, 0x00
-};
-
-// 温度计 图标 (16x16)
-static const uint8_t image_thermometer_bits[] = {
-    0x38, 0x00, 0x44, 0x40, 0xd4, 0xa0, 0x54, 0x40, 0xd4, 0x1c, 0x54, 0x06, 
-    0xd4, 0x02, 0x54, 0x02, 0x54, 0x06, 0x92, 0x1c, 0x39, 0x01, 0x75, 0x01, 
-    0x7d, 0x01, 0x39, 0x01, 0x82, 0x00, 0x7c, 0x00
-};
-
-static void DrawThermometer(u8g2_t* u8g2, int32_t temp_int, int x, int y) {
-  char temp_str[16];
-
-  u8g2_SetBitmapMode(u8g2, 1);
-  u8g2_SetFontMode(u8g2, 1);
-
-  // 绘制温度图标
-  u8g2_DrawXBM(u8g2, x, y, 16, 16, image_thermometer_bits);
-
-  // 绘制温度数值和单位
-  u8g2_SetFont(u8g2, u8g2_font_helvB12_tf);
-  snprintf(temp_str, sizeof(temp_str), "%ld°C", temp_int);
-  u8g2_DrawUTF8(u8g2, x + 20, y + 15, temp_str);
-}
-
-static void DrawHumidity(u8g2_t* u8g2, int32_t humi_int, int x, int y) {
-  char humi_str[16];
-
-  u8g2_SetBitmapMode(u8g2, 1);
-  u8g2_SetFontMode(u8g2, 1);
-
-  // 绘制湿度图标
-  u8g2_DrawXBM(u8g2, x, y, 16, 16, image_humidity_drop_bits);
-
-  // 绘制湿度数值和单位
-  u8g2_SetFont(u8g2, u8g2_font_helvB12_tf);
-  snprintf(humi_str, sizeof(humi_str), "%ld%%", humi_int);
-  u8g2_DrawStr(u8g2, x + 20, y + 15, humi_str);
-}
 /* USER CODE END Application */
 

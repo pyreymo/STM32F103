@@ -31,7 +31,10 @@ extern "C" {
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include <stdarg.h>
+#include <stdio.h>
 
+#include "usart.h"
 /* USER CODE END Includes */
 
 /* Exported types ------------------------------------------------------------*/
@@ -63,7 +66,20 @@ void Error_Handler(void);
 #define DHT11_GPIO_Port GPIOA
 
 /* USER CODE BEGIN Private defines */
+static inline void UART_Printf(UART_HandleTypeDef* huart, const char* fmt, ...) {
+  static char uart_buffer[256];
 
+  va_list args;
+  va_start(args, fmt);
+
+  int len = vsnprintf(uart_buffer, sizeof(uart_buffer), fmt, args);
+
+  va_end(args);
+
+  if (len > 0) {
+    HAL_UART_Transmit(huart, (uint8_t*)uart_buffer, len, HAL_MAX_DELAY);
+  }
+}
 /* USER CODE END Private defines */
 
 #ifdef __cplusplus

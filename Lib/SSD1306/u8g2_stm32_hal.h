@@ -16,6 +16,11 @@ extern "C" {
 #include "i2c.h"
 #include "stm32f1xx_hal.h"
 #include "u8g2.h"
+#include "cmsis_os.h"
+
+/* External variables --------------------------------------------------------*/
+extern osSemaphoreId_t i2cDmaSemaphoreHandle;
+extern I2C_HandleTypeDef hi2c1;
 
 /* Function prototypes -------------------------------------------------------*/
 uint8_t u8x8_byte_stm32_hw_i2c(u8x8_t* u8x8, uint8_t msg, uint8_t arg_int, void* arg_ptr);

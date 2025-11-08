@@ -19,6 +19,7 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "cmsis_os.h"
+#include "dma.h"
 #include "i2c.h"
 #include "tim.h"
 #include "usart.h"
@@ -47,7 +48,10 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-
+osSemaphoreId_t i2cDmaSemaphoreHandle;
+const osSemaphoreAttr_t i2cDmaSemaphore_attributes = {
+  .name = "i2cDmaSemaphore"
+};
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -91,12 +95,16 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_DMA_Init();
   MX_I2C1_Init();
   MX_USART1_UART_Init();
   MX_TIM2_Init();
   MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
-
+  i2cDmaSemaphoreHandle = osSemaphoreNew(1, 0, &i2cDmaSemaphore_attributes);
+  if (i2cDmaSemaphoreHandle == NULL) {
+    Error_Handler();
+  }
   /* USER CODE END 2 */
 
   /* Init scheduler */
