@@ -115,3 +115,7 @@ uint8_t u8x8_gpio_and_delay_stm32(u8x8_t* u8x8, uint8_t msg, uint8_t arg_int, vo
 void u8g2_Setup_ssd1306_i2c_128x64_noname_f_hal(u8g2_t* u8g2, const u8g2_cb_t* rotation) {
   u8g2_Setup_ssd1306_i2c_128x64_noname_f(u8g2, rotation, u8x8_byte_stm32_hw_i2c, u8x8_gpio_and_delay_stm32);
 }
+
+void u8g2_Setup_sh1106_i2c_128x64_noname_f_hal(u8g2_t* u8g2, const u8g2_cb_t* rotation) {
+  u8g2_Setup_sh1106_i2c_128x64_noname_f(u8g2, rotation, u8x8_byte_stm32_hw_i2c, u8x8_gpio_and_delay_stm32);
+}

@@ -45,6 +45,7 @@ target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
 # Add sources to executable
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user sources here
+    Core/Src/face.c
     Lib/DHT11/DHT11.c
     Lib/SSD1306/u8g2_stm32_hal.c
     Lib/SSD1306/U8g2_csrc/u8g2_setup.c

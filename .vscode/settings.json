@@ -7,6 +7,7 @@
         "stm32f1xx_hal.h": "c",
         "ssd1306_tests.h": "c",
         "main.h": "c",
-        "dht11.h": "c"
+        "dht11.h": "c",
+        "freertos.h": "c"
     }
 }

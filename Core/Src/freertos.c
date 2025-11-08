@@ -36,6 +36,7 @@
 #include "u8g2.h"
 #include "u8g2_stm32_hal.h"
 #include "usart.h"
+#include "face.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -218,30 +219,31 @@ void StartSensorTask(void *argument)
 void StartDisplayTask(void *argument)
 {
   /* USER CODE BEGIN StartDisplayTask */
-  DHT11_DATA_S receivedData;
+  DHT11_DATA_S receivedData = {0};
   osStatus_t status;
 
-  /* Initialize U8g2 for SSD1306 128x64 OLED display */
-  u8g2_Setup_ssd1306_i2c_128x64_noname_f_hal(&u8g2, U8G2_R0);
+  /* 试了半天，发现硬件实际上是sh1106 */
+  u8g2_Setup_sh1106_i2c_128x64_noname_f_hal(&u8g2, U8G2_R0);
   u8g2_InitDisplay(&u8g2);
   u8g2_SetPowerSave(&u8g2, 0);
-  u8g2_ClearDisplay(&u8g2);
+
+  Face_Init();
 
   UART_Printf(&huart1, "[USER] SSD1306 display initialized\r\n");
 
   /* Infinite loop */
   for (;;) {
-    /* 队列存在信息时会解除阻塞；平时会阻塞在这里，不会占用CPU */
-    status = osMessageQueueGet(sensorDataQueueHandle, &receivedData, NULL, osWaitForever);
+    uint32_t currentTime = osKernelGetTickCount();
 
-    if (status == osOK) {
+    Face_Update(currentTime);
+
+    status = osMessageQueueGet(sensorDataQueueHandle, &receivedData, NULL, 16);
+
+    if (status == osOK || status == osErrorTimeout) {
       if (osMutexAcquire(screenUpdateMutexHandle, 100) == osOK) {
         u8g2_ClearBuffer(&u8g2);
 
-        // 温度显示在左侧
-        DrawThermometer(&u8g2, (int)roundf(receivedData.temperature), 2, 32);
-        // 湿度显示在右侧
-        DrawHumidity(&u8g2, (int)roundf(receivedData.humidity), 70, 32);
+        Face_Draw(&u8g2, currentTime);
 
         u8g2_SendBuffer(&u8g2);
 
