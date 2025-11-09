@@ -44,6 +44,7 @@
 
 /* USER CODE BEGIN Includes */
 /* Section where include file can be added */
+#include "stm32f1xx_hal.h"
 /* USER CODE END Includes */
 
 /* Ensure definitions are only used by the compiler, and not by the assembler. */
@@ -148,6 +149,12 @@ standard names. */
 
 /* USER CODE BEGIN Defines */
 /* Section where parameter definitions can be added (for instance, to override default ones in FreeRTOS.h) */
+#define configRECORD_STACK_HIGH_ADDRESS 1
+#define configGENERATE_RUN_TIME_STATS 1
+extern TIM_HandleTypeDef htim3;
+extern volatile uint32_t g_HighFrequencyTimerTicks;
+#define portCONFIGURE_TIMER_FOR_RUN_TIME_STATS() HAL_TIM_Base_Start_IT(&htim3)
+#define portGET_RUN_TIME_COUNTER_VALUE()         ((g_HighFrequencyTimerTicks << 16UL) | htim3.Instance->CNT)
 /* USER CODE END Defines */
 
 #endif /* FREERTOS_CONFIG_H */

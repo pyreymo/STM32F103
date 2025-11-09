@@ -262,18 +262,13 @@ void StartDisplayTask(void *argument)
       Face_Draw(myFace, &u8g2, currentTime);
       u8g2_SendBuffer(&u8g2);
 
-      if (osMutexRelease(screenUpdateMutexHandle) != osOK) {
-        UART_Printf(&huart1, "[USER] [FATAL] screenUpdateMutexHandle release failed!\r\n");
-        break;
-      }
+      (void)osMutexRelease(screenUpdateMutexHandle);
     } else {
       UART_Printf(&huart1, "[USER] [WARN] Skip frame, mutex busy.\r\n");
     }
 
     // UART_Printf(&huart1, "Frame time: %d ms\r\n", osKernelGetTickCount() - currentTime);
   }
-
-  Face_Destroy(myFace);
   /* USER CODE END StartDisplayTask */
 }
 

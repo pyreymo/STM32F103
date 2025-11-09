@@ -15,7 +15,8 @@
             "searchDir": [],
             "runToEntryPoint": "main",
             "showDevDebugOutput": "none",
-            "preLaunchTask": "CMake: 生成"
+            "preLaunchTask": "CMake: 生成",
+            "rtos": "FreeRTOS"
         }
     ]
 }
