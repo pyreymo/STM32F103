@@ -5,13 +5,12 @@
 extern "C" {
 
 FaceHandle Face_Create(void) {
-  Face* face = new Face();
-  return face;
+  // Make this a singleton to avoid C++ style new/delete op
+  return &g_faceInstance;
 }
 
 void Face_Destroy(FaceHandle handle) {
-  Face* face = static_cast<Face*>(handle);
-  delete face;
+  (void)handle;  // NO-OP, never destruct for now
 }
 
 void Face_Init(FaceHandle handle) {

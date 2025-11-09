@@ -6,6 +6,8 @@
 
 class Face;
 
+extern Face g_faceInstance;
+
 /**
  * @brief Abstract Base Class for all face animations.
  *

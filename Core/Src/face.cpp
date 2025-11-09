@@ -5,6 +5,8 @@
 
 #include "cmsis_os.h"
 
+Face g_faceInstance;
+
 // --- Constants ---
 #ifndef PI
 #define PI 3.14159265f
@@ -49,6 +51,13 @@ static void drawEyes(u8g2_t* u8g2, int eye_height, int x_offset) {
     u8g2_DrawRBox(u8g2, right_eye_center_x - EYE_WIDTH / 2, top_y, EYE_WIDTH, eye_height, EYE_CORNER_RADIUS);
   }
 }
+
+// --- Look-Up Table for Sine Easing ---
+// Represents the first quadrant of a sine wave, scaled to 0-255
+// Placed in Flash memory due to 'const'
+const uint8_t sine_lut_q1[] = {0,   12,  25,  37,  50,  62,  74,  86,  98,  109, 121, 132, 143, 153, 163, 173,
+                               182, 191, 200, 208, 216, 223, 230, 236, 242, 246, 250, 253, 255, 255, 255, 255};
+const int SINE_LUT_SIZE = sizeof(sine_lut_q1) / sizeof(sine_lut_q1[0]);
 
 // --- Animation Base Class Implementation ---
 Animation::Animation(Face* face) : m_face(face) {}
@@ -166,7 +175,7 @@ Animation* BlinkAnimation::update(uint32_t currentTime) {
 }
 
 void BlinkAnimation::draw(u8g2_t* u8g2, uint32_t currentTime) {
-  float eye_height_multiplier = 1.0f;
+  uint32_t eye_height = EYE_HEIGHT;
   uint32_t elapsedTime = getElapsedTime(currentTime);
 
   int current_look_offset = 0;
@@ -174,19 +183,31 @@ void BlinkAnimation::draw(u8g2_t* u8g2, uint32_t currentTime) {
     current_look_offset = m_returnAnimation->get_offset_x(currentTime);
   }
 
+  uint32_t progress;
+
   switch (m_internalState) {
     case CLOSING:
-      eye_height_multiplier = cosf(fminf(1.0f, (float)elapsedTime / BLINK_DURATION_MS) * PI * 0.5f);
+      progress = (elapsedTime * (SINE_LUT_SIZE - 1)) / BLINK_DURATION_MS;
+      if (progress >= SINE_LUT_SIZE) {
+        eye_height = 0;
+      } else {
+        eye_height = (EYE_HEIGHT * sine_lut_q1[SINE_LUT_SIZE - 1 - progress]) / 255;
+      }
       break;
     case CLOSED:
-      eye_height_multiplier = 0.0f;
+      eye_height = 0;
       break;
     case OPENING:
       elapsedTime -= (BLINK_DURATION_MS + BLINK_CLOSED_MS);
-      eye_height_multiplier = sinf(fminf(1.0f, (float)elapsedTime / BLINK_DURATION_MS) * PI * 0.5f);
+      progress = (elapsedTime * (SINE_LUT_SIZE - 1)) / BLINK_DURATION_MS;
+      if (progress >= SINE_LUT_SIZE) {
+        eye_height = EYE_HEIGHT;
+      } else {
+        eye_height = (EYE_HEIGHT * sine_lut_q1[progress]) / 255;
+      }
       break;
   }
-  drawEyes(u8g2, (int)(EYE_HEIGHT * eye_height_multiplier), current_look_offset);
+  drawEyes(u8g2, eye_height, current_look_offset);
 }
 
 int BlinkAnimation::get_offset_x(uint32_t currentTime) const {
@@ -225,12 +246,14 @@ void LookAnimation::resume(uint32_t currentTime) { Animation::resume(currentTime
 
 int LookAnimation::get_offset_x(uint32_t currentTime) const {
   uint32_t elapsed = getElapsedTime(currentTime);
+  int32_t eased_offset;
+  uint32_t progress;
 
   // Transition to target
   if (elapsed <= LOOK_TRANSITION_MS) {
-    float progress = (float)elapsed / LOOK_TRANSITION_MS;
-    float eased_progress = sinf(progress * PI * 0.5f);
-    return m_start_offset_x + (int)((m_target_offset_x - m_start_offset_x) * eased_progress);
+    progress = (elapsed * (SINE_LUT_SIZE - 1)) / LOOK_TRANSITION_MS;
+    eased_offset = (int32_t)((m_target_offset_x - m_start_offset_x) * sine_lut_q1[progress]) / 255;
+    return m_start_offset_x + eased_offset;
   }
   // Hold at target
   if (elapsed <= m_holdUntilTime) {
@@ -239,9 +262,9 @@ int LookAnimation::get_offset_x(uint32_t currentTime) const {
   // Transition back to center
   uint32_t return_elapsed = elapsed - m_holdUntilTime;
   if (return_elapsed <= LOOK_TRANSITION_MS) {
-    float progress = (float)return_elapsed / LOOK_TRANSITION_MS;
-    float eased_progress = sinf(progress * PI * 0.5f);
-    return m_target_offset_x - (int)(m_target_offset_x * eased_progress);
+    progress = (return_elapsed * (SINE_LUT_SIZE - 1)) / LOOK_TRANSITION_MS;
+    eased_offset = (int32_t)(m_target_offset_x * sine_lut_q1[progress]) / 255;
+    return m_target_offset_x - eased_offset;
   }
 
   // After transition back

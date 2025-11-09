@@ -10,6 +10,7 @@
         "dht11.h": "c",
         "freertos.h": "c",
         "u8g2_stm32_hal.h": "c",
-        "stdio.h": "c"
+        "stdio.h": "c",
+        "cstdint": "cpp"
     }
 }

@@ -225,10 +225,6 @@ void StartDisplayTask(void *argument)
   u8g2_SetPowerSave(&u8g2, 0);
 
   FaceHandle myFace = Face_Create();
-  if (myFace == NULL) {
-    UART_Printf(&huart1, "[USER] Face creation failed!\r\n");
-    osThreadTerminate(NULL);
-  }
   Face_Init(myFace);
 
   UART_Printf(&huart1, "[USER] SH1106 display initialized\r\n");
@@ -240,16 +236,11 @@ void StartDisplayTask(void *argument)
 
   /* Infinite loop */
   for (;;) {
-    uint32_t nextWakeTime = lastWakeTime + FRAME_PERIOD_MS;
-    uint32_t currentTime = osKernelGetTickCount();
+    // Wait until the next frame time
+    osDelayUntil(lastWakeTime + FRAME_PERIOD_MS);
+    lastWakeTime = osKernelGetTickCount();
 
-    if (nextWakeTime > currentTime) {
-      osDelay(nextWakeTime - currentTime);
-    }
-
-    lastWakeTime = nextWakeTime;
-
-    currentTime = osKernelGetTickCount();
+    uint32_t currentTime = lastWakeTime;
 
     status = osMessageQueueGet(sensorDataQueueHandle, &receivedData, NULL, 0);
     if (status == osOK) {  // do nothing for now
@@ -266,8 +257,6 @@ void StartDisplayTask(void *argument)
     } else {
       UART_Printf(&huart1, "[USER] [WARN] Skip frame, mutex busy.\r\n");
     }
-
-    // UART_Printf(&huart1, "Frame time: %d ms\r\n", osKernelGetTickCount() - currentTime);
   }
   /* USER CODE END StartDisplayTask */
 }
