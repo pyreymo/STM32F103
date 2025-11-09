@@ -36,7 +36,7 @@
 #include "u8g2.h"
 #include "u8g2_stm32_hal.h"
 #include "usart.h"
-#include "face.h"
+#include "face_wrapper.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -224,13 +224,14 @@ void StartDisplayTask(void *argument)
   u8g2_InitDisplay(&u8g2);
   u8g2_SetPowerSave(&u8g2, 0);
 
-  Face_t* myFace = Face_Create();
+  FaceHandle myFace = Face_Create();
   if (myFace == NULL) {
     UART_Printf(&huart1, "[USER] Face creation failed!\r\n");
     osThreadTerminate(NULL);
   }
+  Face_Init(myFace);
 
-  UART_Printf(&huart1, "[USER] SSD1306 display initialized\r\n");
+  UART_Printf(&huart1, "[USER] SH1106 display initialized\r\n");
 
   const uint32_t FRAME_RATE = 20;
   const uint32_t FRAME_PERIOD_MS = 1000 / FRAME_RATE;
